@@ -143,7 +143,6 @@ const useLiveMenu = () => {
     }, {});
   }, [sortedItems]);
 
-
   return { fetchMenu, groupedItems, isLoading, items, setStatusText, statusText };
 };
 
