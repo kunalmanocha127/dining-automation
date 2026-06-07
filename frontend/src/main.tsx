@@ -1,0 +1,321 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { io } from "socket.io-client";
+import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import "./styles.css";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+
+type MenuItem = {
+  _id: string;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  imageUrl: string;
+  isAvailable: boolean;
+};
+
+type MenuItemForm = {
+  name: string;
+  description: string;
+  category: string;
+  price: string;
+  imageUrl: string;
+  isAvailable: boolean;
+};
+
+const emptyForm: MenuItemForm = {
+  name: "",
+  description: "",
+  category: "",
+  price: "",
+  imageUrl: "",
+  isAvailable: true
+};
+
+const socket = io(API_BASE_URL, {
+  withCredentials: true
+});
+
+const formatCurrency = (value: number): string =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0
+  }).format(value);
+
+const toForm = (item: MenuItem): MenuItemForm => ({
+  name: item.name,
+  description: item.description,
+  category: item.category,
+  price: String(item.price),
+  imageUrl: item.imageUrl,
+  isAvailable: item.isAvailable
+});
+
+function App() {
+  const [items, setItems] = React.useState<MenuItem[]>([]);
+  const [form, setForm] = React.useState<MenuItemForm>(emptyForm);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [statusText, setStatusText] = React.useState("Loading menu");
+
+  const fetchMenu = React.useCallback(async () => {
+    setIsLoading(true);
+    const response = await fetch(`${API_BASE_URL}/api/menu`);
+    const data = (await response.json()) as MenuItem[];
+    setItems(data);
+    setIsLoading(false);
+    setStatusText(`${data.length} menu items loaded`);
+  }, []);
+
+  React.useEffect(() => {
+    fetchMenu().catch(() => {
+      setIsLoading(false);
+      setStatusText("Backend connection failed");
+    });
+  }, [fetchMenu]);
+
+  React.useEffect(() => {
+    socket.on("menu:item-created", (item: MenuItem) => {
+      setItems((current) => [...current, item]);
+    });
+
+    socket.on("menu:item-updated", (item: MenuItem) => {
+      setItems((current) => current.map((currentItem) => (currentItem._id === item._id ? item : currentItem)));
+    });
+
+    socket.on("menu:availability-changed", (payload: { itemId: string; isAvailable: boolean }) => {
+      setItems((current) =>
+        current.map((item) => (item._id === payload.itemId ? { ...item, isAvailable: payload.isAvailable } : item))
+      );
+    });
+
+    socket.on("menu:item-deleted", (payload: { itemId: string }) => {
+      setItems((current) => current.filter((item) => item._id !== payload.itemId));
+    });
+
+    return () => {
+      socket.off("menu:item-created");
+      socket.off("menu:item-updated");
+      socket.off("menu:availability-changed");
+      socket.off("menu:item-deleted");
+    };
+  }, []);
+
+  const sortedItems = React.useMemo(
+    () => [...items].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)),
+    [items]
+  );
+
+  const groupedItems = React.useMemo(() => {
+    return sortedItems.reduce<Record<string, MenuItem[]>>((groups, item) => {
+      groups[item.category] = [...(groups[item.category] ?? []), item];
+      return groups;
+    }, {});
+  }, [sortedItems]);
+
+  const availableCount = items.filter((item) => item.isAvailable).length;
+
+  const updateForm = (field: keyof MenuItemForm, value: string | boolean) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const resetForm = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+  };
+
+  const saveItem = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSaving(true);
+
+    const payload = {
+      ...form,
+      price: Number(form.price)
+    };
+
+    const response = await fetch(`${API_BASE_URL}/api/menu${editingId ? `/${editingId}` : ""}`, {
+      method: editingId ? "PUT" : "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      setStatusText("Could not save menu item");
+      setIsSaving(false);
+      return;
+    }
+
+    resetForm();
+    setIsSaving(false);
+    setStatusText(editingId ? "Menu item updated" : "Menu item added");
+  };
+
+  const toggleAvailability = async (item: MenuItem) => {
+    await fetch(`${API_BASE_URL}/api/menu/${item._id}/availability`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ isAvailable: !item.isAvailable })
+    });
+  };
+
+  const deleteItem = async (item: MenuItem) => {
+    await fetch(`${API_BASE_URL}/api/menu/${item._id}`, {
+      method: "DELETE"
+    });
+    setStatusText(`${item.name} removed`);
+  };
+
+  return (
+    <main className="app-shell">
+      <section className="top-bar">
+        <div>
+          <p className="eyebrow">Admin Menu Control</p>
+          <h1>Dining Automation</h1>
+        </div>
+        <button className="icon-button labeled" onClick={fetchMenu} title="Refresh menu" type="button">
+          <RefreshCw size={18} />
+          Refresh
+        </button>
+      </section>
+
+      <section className="metrics-row" aria-label="Menu summary">
+        <div>
+          <span>Total Items</span>
+          <strong>{items.length}</strong>
+        </div>
+        <div>
+          <span>Available</span>
+          <strong>{availableCount}</strong>
+        </div>
+        <div>
+          <span>Unavailable</span>
+          <strong>{items.length - availableCount}</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong>{statusText}</strong>
+        </div>
+      </section>
+
+      <section className="workspace">
+        <form className="editor-panel" onSubmit={saveItem}>
+          <div className="panel-heading">
+            <h2>{editingId ? "Edit Item" : "Add Item"}</h2>
+            {editingId ? (
+              <button className="icon-button" onClick={resetForm} title="Cancel edit" type="button">
+                <X size={18} />
+              </button>
+            ) : null}
+          </div>
+
+          <label>
+            Name
+            <input required value={form.name} onChange={(event) => updateForm("name", event.target.value)} />
+          </label>
+          <label>
+            Category
+            <input required value={form.category} onChange={(event) => updateForm("category", event.target.value)} />
+          </label>
+          <label>
+            Price
+            <input
+              min="0"
+              required
+              type="number"
+              value={form.price}
+              onChange={(event) => updateForm("price", event.target.value)}
+            />
+          </label>
+          <label>
+            Image URL
+            <input value={form.imageUrl} onChange={(event) => updateForm("imageUrl", event.target.value)} />
+          </label>
+          <label>
+            Description
+            <textarea value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+          </label>
+          <label className="checkbox-row">
+            <input
+              checked={form.isAvailable}
+              type="checkbox"
+              onChange={(event) => updateForm("isAvailable", event.target.checked)}
+            />
+            Available now
+          </label>
+
+          <button className="primary-action" disabled={isSaving} type="submit">
+            {editingId ? <Check size={18} /> : <Plus size={18} />}
+            {editingId ? "Save Changes" : "Add Menu Item"}
+          </button>
+        </form>
+
+        <section className="menu-panel">
+          {isLoading ? <p className="empty-state">Loading menu items...</p> : null}
+          {!isLoading && items.length === 0 ? <p className="empty-state">No menu items yet.</p> : null}
+
+          {Object.entries(groupedItems).map(([category, categoryItems]) => (
+            <section className="category-section" key={category}>
+              <div className="category-heading">
+                <h2>{category}</h2>
+                <span>{categoryItems.length} items</span>
+              </div>
+
+              <div className="item-grid">
+                {categoryItems.map((item) => (
+                  <article className={`menu-card ${item.isAvailable ? "" : "is-disabled"}`} key={item._id}>
+                    <div className="menu-card-main">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>{item.description}</p>
+                      </div>
+                      <strong>{formatCurrency(item.price)}</strong>
+                    </div>
+
+                    <div className="card-actions">
+                      <button
+                        className={`switch ${item.isAvailable ? "on" : ""}`}
+                        onClick={() => toggleAvailability(item)}
+                        title={item.isAvailable ? "Mark unavailable" : "Mark available"}
+                        type="button"
+                      >
+                        <span />
+                      </button>
+                      <button
+                        className="icon-button"
+                        onClick={() => {
+                          setEditingId(item._id);
+                          setForm(toForm(item));
+                        }}
+                        title="Edit item"
+                        type="button"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button className="icon-button danger" onClick={() => deleteItem(item)} title="Delete item" type="button">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </section>
+      </section>
+    </main>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
