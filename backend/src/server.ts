@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { connectDB } from "./config/db";
 import { menuRouter } from "./routes/menuRoutes";
+import { orderRouter } from "./routes/orderRoutes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,6 +36,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/menu", menuRouter);
+app.use("/api/orders", orderRouter);
 
 io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);
