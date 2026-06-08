@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Types } from "mongoose";
+import { DiningSessionModel } from "../models/DiningSession";
 import { MenuItemModel } from "../models/MenuItem";
 import { CreateOrderItemInput, OrderModel, OrderStatus, orderStatuses } from "../models/Order";
 
@@ -16,6 +17,55 @@ const activeStatuses: OrderStatus[] = ["Received", "Preparing", "Ready to Serve"
 
 const isOrderStatus = (value: string): value is OrderStatus => {
   return orderStatuses.includes(value as OrderStatus);
+};
+
+const refreshSessionStatus = async (sessionId: Types.ObjectId | string) => {
+  const sessionOrders = await OrderModel.find({
+    sessionId,
+    status: { $ne: "Cancelled" }
+  });
+
+  const totalAmount = sessionOrders.reduce((total, order) => total + order.totalAmount, 0);
+  const hasOrders = sessionOrders.length > 0;
+  const allOrdersFulfilled = hasOrders && sessionOrders.every((order) => order.status === "Fulfilled");
+  const nextStatus = !hasOrders ? "Cancelled" : allOrdersFulfilled ? "ReadyForBill" : "Active";
+
+  const session = await DiningSessionModel.findByIdAndUpdate(
+    sessionId,
+    {
+      totalAmount,
+      status: nextStatus,
+      closedAt: !hasOrders ? new Date() : null
+    },
+    { new: true, runValidators: true }
+  );
+
+  return session;
+};
+
+const getOrCreateActiveSession = async (tableNumber: number, mobileNumber: string) => {
+  const existingSession = await DiningSessionModel.findOne({
+    tableNumber,
+    status: { $in: ["Active", "ReadyForBill"] }
+  });
+
+  if (existingSession) {
+    if (existingSession.status === "ReadyForBill") {
+      existingSession.status = "Active";
+    }
+
+    existingSession.mobileNumber = mobileNumber;
+    await existingSession.save();
+    return existingSession;
+  }
+
+  return DiningSessionModel.create({
+    tableNumber,
+    mobileNumber,
+    status: "Active",
+    orderIds: [],
+    totalAmount: 0
+  });
 };
 
 orderRouter.get("/", async (req, res, next) => {
@@ -95,7 +145,10 @@ orderRouter.post("/", async (req, res, next) => {
 
     const totalAmount = orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
 
+    const session = await getOrCreateActiveSession(tableNumber, mobileNumber);
+
     const order = await OrderModel.create({
+      sessionId: session._id,
       tableNumber,
       mobileNumber,
       items: orderItems,
@@ -103,7 +156,13 @@ orderRouter.post("/", async (req, res, next) => {
       orderInstructions: typeof orderInstructions === "string" ? orderInstructions : ""
     });
 
+    session.orderIds.push(order._id);
+    session.totalAmount += order.totalAmount;
+    session.status = "Active";
+    await session.save();
+
     req.app.get("io").emit("order:created", order);
+    req.app.get("io").emit("session:updated", session);
     res.status(201).json(order);
   } catch (error) {
     if (error instanceof Error) {
@@ -145,15 +204,21 @@ orderRouter.patch("/:orderId/items/:itemId/fulfill", async (req, res, next) => {
     }
 
     await order.save();
+    const session = await refreshSessionStatus(order.sessionId);
 
     req.app.get("io").emit("order:item-fulfilled", {
       orderId: order._id,
       itemId: orderItem._id,
-      order
+      order,
+      session
     });
 
     if (allItemsFulfilled) {
       req.app.get("io").emit("order:fulfilled", order);
+    }
+
+    if (session) {
+      req.app.get("io").emit("session:updated", session);
     }
 
     res.json(order);
@@ -179,8 +244,12 @@ orderRouter.patch("/:id/fulfill", async (req, res, next) => {
     order.status = "Fulfilled";
 
     await order.save();
+    const session = await refreshSessionStatus(order.sessionId);
 
     req.app.get("io").emit("order:fulfilled", order);
+    if (session) {
+      req.app.get("io").emit("session:updated", session);
+    }
     res.json(order);
   } catch (error) {
     next(error);
@@ -207,6 +276,11 @@ orderRouter.patch("/:id/status", async (req, res, next) => {
       orderId: order._id,
       status: order.status
     });
+
+    const session = await refreshSessionStatus(order.sessionId);
+    if (session) {
+      req.app.get("io").emit("session:updated", session);
+    }
 
     res.json(order);
   } catch (error) {

@@ -595,6 +595,59 @@ textarea {
   color: #167a56;
 }
 
+.session-chip {
+  color: #60756a;
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  margin-top: 6px;
+}
+
+.session-card {
+  border-color: #c7d8cd;
+}
+
+.session-orders {
+  display: grid;
+  gap: 12px;
+}
+
+.session-order-block {
+  background: #f7faf6;
+  border: 1px solid #dce5dd;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.session-order-block.is-fulfilled {
+  background: #edf6ef;
+  border-color: #b9d6bf;
+}
+
+.session-order-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.session-order-heading h4 {
+  font-size: 0.98rem;
+  margin: 0 0 4px;
+}
+
+.session-order-heading span,
+.session-progress {
+  color: #60756a;
+  font-size: 0.86rem;
+}
+
+.session-order-action {
+  justify-self: end;
+}
+
 .order-meta {
   color: #60756a;
   flex-wrap: wrap;
@@ -725,7 +778,8 @@ textarea {
 
   .live-orders-header,
   .order-card-top,
-  .order-actions {
+  .order-actions,
+  .session-order-heading {
     align-items: stretch;
     flex-direction: column;
   }

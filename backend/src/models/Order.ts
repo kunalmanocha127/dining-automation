@@ -53,6 +53,12 @@ const orderSchema = new Schema(
       min: 1,
       index: true
     },
+    sessionId: {
+      type: Schema.Types.ObjectId,
+      ref: "DiningSession",
+      required: true,
+      index: true
+    },
     mobileNumber: {
       type: String,
       required: true,
