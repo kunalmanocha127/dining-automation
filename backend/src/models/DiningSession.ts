@@ -29,6 +29,12 @@ const diningSessionSchema = new Schema(
         ref: "Order"
       }
     ],
+    billId: {
+      type: Schema.Types.ObjectId,
+      ref: "Bill",
+      default: null,
+      index: true
+    },
     totalAmount: {
       type: Number,
       default: 0,

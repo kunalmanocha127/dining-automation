@@ -1,7 +1,10 @@
 import { Receipt, RefreshCw } from "lucide-react";
+import React from "react";
+import { BillSummaryDialog } from "./BillSummaryDialog";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { useLiveSessions } from "../hooks/useLiveSessions";
-import { fulfillOrder, fulfillOrderItem } from "../services/api";
-import { DiningSession } from "../types";
+import { endSession, fulfillOrder, fulfillOrderItem, generateSessionBill } from "../services/api";
+import { Bill, DiningSession } from "../types";
 import { formatCurrency } from "../utils/format";
 
 const getSessionFulfillment = (session: DiningSession) => {
@@ -18,6 +21,33 @@ const getSessionFulfillment = (session: DiningSession) => {
 
 export function LiveOrdersPanel() {
   const { fetchSessions, isLoading, sessions, sessionsStatus } = useLiveSessions();
+  const [bill, setBill] = React.useState<Bill | null>(null);
+  const [billError, setBillError] = React.useState("");
+  const [billTarget, setBillTarget] = React.useState<DiningSession | null>(null);
+  const [endTarget, setEndTarget] = React.useState<DiningSession | null>(null);
+
+  const handleGenerateBill = async (session: DiningSession) => {
+    try {
+      setBillError("");
+      const generatedBill = await generateSessionBill(session._id);
+      setBill(generatedBill);
+      setBillTarget(null);
+      await fetchSessions();
+    } catch (error) {
+      setBillError(error instanceof Error ? error.message : "Could not generate bill.");
+    }
+  };
+
+  const handleEndSession = async (session: DiningSession) => {
+    try {
+      setBillError("");
+      await endSession(session._id);
+      setEndTarget(null);
+      await fetchSessions();
+    } catch (error) {
+      setBillError(error instanceof Error ? error.message : "Could not end session.");
+    }
+  };
 
   return (
     <section className="live-orders-panel">
@@ -34,10 +64,12 @@ export function LiveOrdersPanel() {
 
       {isLoading ? <p className="empty-state">Loading live sessions...</p> : null}
       {!isLoading && sessions.length === 0 ? <p className="empty-state">No active table sessions in queue.</p> : null}
+      {billError ? <p className="empty-state">{billError}</p> : null}
 
       <div className="orders-grid">
         {sessions.map((session) => {
           const { fulfilledCount, itemCount, isReadyForBill } = getSessionFulfillment(session);
+          const hasBill = Boolean(session.billId);
 
           return (
             <article className={`order-card session-card ${isReadyForBill ? "is-fulfilled" : ""}`} key={session._id}>
@@ -112,8 +144,12 @@ export function LiveOrdersPanel() {
 
               <div className="order-actions">
                 <strong>{formatCurrency(session.totalAmount)}</strong>
-                {isReadyForBill ? (
-                  <button className="bill-action" type="button">
+                {hasBill ? (
+                  <button className="danger-action" onClick={() => setEndTarget(session)} type="button">
+                    End Session
+                  </button>
+                ) : isReadyForBill ? (
+                  <button className="bill-action" onClick={() => setBillTarget(session)} type="button">
                     <Receipt size={18} />
                     Generate Bill
                   </button>
@@ -125,6 +161,27 @@ export function LiveOrdersPanel() {
           );
         })}
       </div>
+
+      {bill ? <BillSummaryDialog bill={bill} onClose={() => setBill(null)} /> : null}
+      {billTarget ? (
+        <ConfirmActionDialog
+          confirmLabel="Generate Bill"
+          message={`Generate a final bill for Table ${billTarget.tableNumber}? This bill will move to the Generated Bills tab.`}
+          onCancel={() => setBillTarget(null)}
+          onConfirm={() => handleGenerateBill(billTarget)}
+          title="CONFIRM BILL GENERATION"
+        />
+      ) : null}
+      {endTarget ? (
+        <ConfirmActionDialog
+          confirmLabel="End Session"
+          danger
+          message={`End the dining session for Table ${endTarget.tableNumber}? It will be removed from Live Orders.`}
+          onCancel={() => setEndTarget(null)}
+          onConfirm={() => handleEndSession(endTarget)}
+          title="END SESSION WARNING"
+        />
+      ) : null}
     </section>
   );
 }

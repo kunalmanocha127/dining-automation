@@ -1,6 +1,7 @@
 import React from "react";
 import { Check, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { DeleteConfirmDialog } from "../components/DeleteConfirmDialog";
+import { GeneratedBillsPanel } from "../components/GeneratedBillsPanel";
 import { LiveOrdersPanel } from "../components/LiveOrdersPanel";
 import { useLiveMenu } from "../hooks/useLiveMenu";
 import { deleteMenuItem, saveMenuItem, toggleMenuItemAvailability } from "../services/api";
@@ -31,7 +32,7 @@ export function AdminDashboard() {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<MenuItem | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState<"menu" | "orders">("menu");
+  const [activeTab, setActiveTab] = React.useState<"orders" | "bills" | "menu">("orders");
   const availableCount = items.filter((item) => item.isAvailable).length;
 
   const updateForm = (field: keyof MenuItemForm, value: string | boolean) => {
@@ -80,11 +81,14 @@ export function AdminDashboard() {
       </section>
 
       <div className="admin-tabs" role="tablist">
-        <button className={activeTab === "menu" ? "active" : ""} onClick={() => setActiveTab("menu")} type="button">
-          Menu Configuration
-        </button>
         <button className={activeTab === "orders" ? "active" : ""} onClick={() => setActiveTab("orders")} type="button">
           Live Orders
+        </button>
+        <button className={activeTab === "bills" ? "active" : ""} onClick={() => setActiveTab("bills")} type="button">
+          Generated Bills
+        </button>
+        <button className={activeTab === "menu" ? "active" : ""} onClick={() => setActiveTab("menu")} type="button">
+          Menu Configuration
         </button>
       </div>
 
@@ -220,8 +224,10 @@ export function AdminDashboard() {
             </section>
           </section>
         </>
-      ) : (
+      ) : activeTab === "orders" ? (
         <LiveOrdersPanel />
+      ) : (
+        <GeneratedBillsPanel />
       )}
 
       {deleteTarget ? (

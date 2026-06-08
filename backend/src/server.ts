@@ -5,6 +5,8 @@ import express, { ErrorRequestHandler } from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { connectDB } from "./config/db";
+import { billRouter } from "./routes/billRoutes";
+import { historyRouter } from "./routes/historyRoutes";
 import { menuRouter } from "./routes/menuRoutes";
 import { orderRouter } from "./routes/orderRoutes";
 import { sessionRouter } from "./routes/sessionRoutes";
@@ -39,6 +41,8 @@ app.get("/health", (_req, res) => {
 app.use("/api/menu", menuRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/sessions", sessionRouter);
+app.use("/api/bills", billRouter);
+app.use("/api/history", historyRouter);
 
 io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);

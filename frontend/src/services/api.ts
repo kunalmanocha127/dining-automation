@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../config";
-import { CreateOrderPayload, DiningSession, MenuItem, MenuItemForm, Order } from "../types";
+import { Bill, CreateOrderPayload, DiningSession, MenuItem, MenuItemForm, Order } from "../types";
 
 export const fetchMenuItems = async (): Promise<MenuItem[]> => {
   const response = await fetch(`${API_BASE_URL}/api/menu`);
@@ -34,6 +34,38 @@ export const fetchActiveOrders = async (): Promise<Order[]> => {
 export const fetchActiveSessions = async (): Promise<DiningSession[]> => {
   const response = await fetch(`${API_BASE_URL}/api/sessions/active`);
   return (await response.json()) as DiningSession[];
+};
+
+export const generateSessionBill = async (sessionId: string): Promise<Bill> => {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/bill`, { method: "POST" });
+
+  if (!response.ok) {
+    const data = (await response.json()) as { message?: string };
+    throw new Error(data.message ?? "Could not generate bill.");
+  }
+
+  return (await response.json()) as Bill;
+};
+
+export const fetchVisibleBills = async (): Promise<Bill[]> => {
+  const response = await fetch(`${API_BASE_URL}/api/bills/visible`);
+  return (await response.json()) as Bill[];
+};
+
+export const markBillPaid = async (billId: string): Promise<Bill> => {
+  const response = await fetch(`${API_BASE_URL}/api/bills/${billId}/paid`, { method: "PATCH" });
+  return (await response.json()) as Bill;
+};
+
+export const endSession = async (sessionId: string): Promise<DiningSession> => {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/end`, { method: "PATCH" });
+
+  if (!response.ok) {
+    const data = (await response.json()) as { message?: string };
+    throw new Error(data.message ?? "Could not end session.");
+  }
+
+  return (await response.json()) as DiningSession;
 };
 
 export const createOrder = async (payload: CreateOrderPayload): Promise<Response> => {
